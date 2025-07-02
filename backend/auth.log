@@ -1,0 +1,56 @@
+2025-07-01 18:36:02,265 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://192.168.43.92:8080
+2025-07-01 18:36:02,265 [INFO] [33mPress CTRL+C to quit[0m
+2025-07-01 18:36:02,265 [INFO]  * Restarting with stat
+2025-07-01 18:36:03,156 [WARNING]  * Debugger is active!
+2025-07-01 18:36:03,168 [INFO]  * Debugger PIN: 731-875-870
+2025-07-01 18:37:11,881 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/auth/__init__.py', reloading
+2025-07-01 18:37:12,081 [INFO]  * Restarting with stat
+2025-07-01 18:37:13,127 [WARNING]  * Debugger is active!
+2025-07-01 18:37:13,139 [INFO]  * Debugger PIN: 731-875-870
+2025-07-01 18:40:27,960 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/tests/auth_test.py', reloading
+2025-07-01 18:40:28,116 [INFO]  * Restarting with stat
+2025-07-01 18:40:29,114 [WARNING]  * Debugger is active!
+2025-07-01 18:40:29,121 [INFO]  * Debugger PIN: 731-875-870
+2025-07-01 18:46:19,750 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/tests/auth_test.py', reloading
+2025-07-01 18:46:19,996 [INFO]  * Restarting with stat
+2025-07-01 18:46:21,084 [WARNING]  * Debugger is active!
+2025-07-01 18:46:21,092 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 10:15:14,641 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/auth/auth.py', reloading
+2025-07-02 10:15:15,050 [INFO]  * Restarting with stat
+2025-07-02 10:15:16,343 [WARNING]  * Debugger is active!
+2025-07-02 10:15:16,383 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 10:16:21,071 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/auth/auth.py', reloading
+2025-07-02 10:16:21,279 [INFO]  * Restarting with stat
+2025-07-02 10:16:22,302 [WARNING]  * Debugger is active!
+2025-07-02 10:16:22,350 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 10:18:15,463 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/auth/auth.py', reloading
+2025-07-02 10:18:15,693 [INFO]  * Restarting with stat
+2025-07-02 10:18:16,700 [WARNING]  * Debugger is active!
+2025-07-02 10:18:16,711 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 10:19:00,203 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/app.py', reloading
+2025-07-02 10:19:00,497 [INFO]  * Restarting with stat
+2025-07-02 10:19:01,597 [WARNING]  * Debugger is active!
+2025-07-02 10:19:01,604 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 10:19:16,752 [INFO]  * Detected change in '/Users/kombi/Dev/Playground/cosmos/agents/Jarvis-Hack/backend/src/app.py', reloading
+2025-07-02 10:19:16,961 [INFO]  * Restarting with stat
+2025-07-02 10:20:09,700 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://192.168.43.92:8080
+2025-07-02 10:20:09,700 [INFO] [33mPress CTRL+C to quit[0m
+2025-07-02 10:20:09,701 [INFO]  * Restarting with stat
+2025-07-02 10:20:10,472 [WARNING]  * Debugger is active!
+2025-07-02 10:20:10,483 [INFO]  * Debugger PIN: 731-875-870
+2025-07-02 11:17:20,974 [INFO] Akash Wallet Address: fetch16zvyxyr2thd4268dh2qukmdsd7q24jjed4a37a
+2025-07-02 11:17:21,020 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://192.168.43.92:8080
+2025-07-02 11:17:21,020 [INFO] [33mPress CTRL+C to quit[0m
+2025-07-02 11:17:21,021 [INFO]  * Restarting with stat
+2025-07-02 11:17:21,823 [INFO] Akash Wallet Address: fetch16zvyxyr2thd4268dh2qukmdsd7q24jjed4a37a
+2025-07-02 11:17:21,838 [WARNING]  * Debugger is active!
+2025-07-02 11:17:21,854 [INFO]  * Debugger PIN: 731-875-870

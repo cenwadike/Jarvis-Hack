@@ -1,0 +1,44 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:latest
+    container_name: akash_postgres
+    environment:
+      POSTGRES_USER: akash_user
+      POSTGRES_PASSWORD: akash_pass
+      POSTGRES_DB: akash_manager
+    ports:
+      - "127.0.0.1:5433:5432"  # Map host port 5433 to container port 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akash_user -d akash_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: akash_redis
+    command: redis-server --requirepass redis_pass  # Set a password for security
+    ports:
+      - "127.0.0.1:6379:6379"  # Map host port 6379 to container port 6379
+    volumes:
+      - redisdata:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_pass", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

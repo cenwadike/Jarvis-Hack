@@ -1,5 +1,5 @@
 # Stage 1: Build dependencies
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ RUN pip install /tmp/en_core_web_sm-3.7.1.tar.gz \
     && rm /tmp/en_core_web_sm-3.7.1.tar.gz
 
 # Stage 2: Final image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

@@ -29,7 +29,7 @@ structure:
 
 ### Frontend
 
-- Framework: Next.js (inferred from Vercel hosting), providing a web interface for user interaction.
+- Framework: Next.js, providing a web interface for user interaction.
 - Deployment: Hosted on Vercel for scalability and accessibility.
 
 #### Components:
@@ -87,20 +87,18 @@ and monitoring resources.
 Jarvis aims to evolve as a voice-driven gateway to decentralized cloud computing, with plans to enhance 
 functionality and integration:
 
-### Short-Term (Post-Hackathon, Q2 2025)
+### Short-Term (Post-Hackathon, H2 2025)
 
-- Voice Command Expansion: Support additional Akash operations (e.g., scaling, termination) via voice.
 - UI Polish: Improve the web interface with real-time deployment logs and voice feedback.
 - Testing: Validate NLP accuracy and ATOM payment reliability on the Akash testnet.
 
-### Medium-Term (Q3-Q4 2025)
+### Medium-Term (Q1-Q3 2026)
 
-- Multi-Cloud Support: Extend voice controls to other decentralized platforms, using ATOM or other Cosmos 
-tokens.
+- Voice Command Expansion: Support additional Akash operations (e.g., scaling, termination) via voice.
 - Database Optimization: Add indexing and analytics for deployment history in PostgreSQL.
 - Mobile Access: Develop a mobile-friendly UI or app for on-the-go management.
 
-### Long-Term (2026 and Beyond)
+### Long-Term (Q4 2026 and Beyond)
 
 - IBC Integration: Explore direct IBC use for cross-chain resource management within Cosmos.
 - AI Enhancement: Train a custom NLP model for better voice command recognition in diverse accents.
@@ -136,7 +134,12 @@ To set up and run Jarvis locally, follow these steps:
 ```bash
     pyenv install 3.11.9
     pyenv local 3.11.9
+    
     pip install -r requirements.txt
+
+    pip install ./en_core_web_sm-3.7.1.tar.gz
+
+    pytest tests
 ```
 
 ### Configure Database:
