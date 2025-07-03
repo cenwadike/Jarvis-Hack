@@ -529,3 +529,4 @@ def test_validate_session_error(valid_wallet_address, settings_fixture, caplog):
             assert error == {"msg": "Internal server error"}
             assert status == 500
             assert "Error validating JWT" in caplog.text
+            

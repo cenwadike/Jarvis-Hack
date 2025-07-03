@@ -8,10 +8,11 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 import speech_recognition as sr
+from cosmpy.aerial.wallet import LocalWallet
 from src.auth.auth import verify_signature, create_session, validate_session, settings
-from src.akash.akash_manager import deploy_to_akash, get_deployment_status, terminate_deployment, get_all_deployments, ADDRESS
-from src.voice.voice_parser import parse_voice_command
+from src.akash.akash_manager import deploy_to_akash, get_deployment_status, terminate_deployment, get_all_deployments
 from bech32 import bech32_decode
+from src.voice.voice_parser import parse_voice_command
 
 # Configure logging
 logging.basicConfig(
@@ -44,6 +45,14 @@ limiter = Limiter(
     storage_uri=settings.redis_url
 )
 recognizer = sr.Recognizer()
+
+# Initialize Akash wallet
+try:
+    wallet = LocalWallet.from_mnemonic(os.getenv("AKASH_MNEMONIC"))
+    logger.info(f"Akash Wallet Initialized: {str(wallet.address())}")
+except Exception as e:
+    logger.error(f"Failed to initialize Akash wallet: {str(e)}")
+    raise
 
 # Input validation patterns
 WALLET_ADDRESS_PATTERN = re.compile(r'^akash1[0-9a-z]{38}$')
@@ -91,7 +100,6 @@ def create_session_endpoint():
         nonce = data.get('nonce')
         signature = data.get('signature')
 
-        # Input validation
         if not all([wallet_address, nonce, signature]):
             logger.warning("Missing required fields in create_session")
             return jsonify({"msg": "Missing wallet_address, nonce, or signature"}), 400
@@ -164,7 +172,6 @@ def login():
         nonce = data.get('nonce')
         signature = data.get('signature')
 
-        # Input validation
         if not all([wallet_address, nonce, signature]):
             logger.warning("Missing required fields in login")
             return jsonify({"msg": "Missing wallet_address, nonce, or signature"}), 400
@@ -211,15 +218,15 @@ def voice_command():
         response = {"raw_text": raw_text}
 
         if command["action"] == "deploy" and command["target"] == "deployment":
-            # Validate deployment parameters
             if not all([command.get("image"), command.get("cpu"), command.get("memory"), command.get("storage"), command.get("ports")]):
                 logger.warning("Missing deployment parameters")
                 return jsonify({"msg": "Missing deployment parameters"}), 400
             
             deployment_id = deploy_to_akash(
+                wallet,
                 wallet_address,
                 command["image"],
-                command["cpu"],
+                float(command["cpu"]),
                 command["memory"],
                 command["storage"],
                 command["ports"]
@@ -231,14 +238,14 @@ def voice_command():
                 logger.warning("Invalid or missing deployment ID")
                 response["result"] = "Please provide a valid deployment ID"
             else:
-                status = get_deployment_status(deployment_id)
+                status = get_deployment_status(wallet_address, deployment_id)
                 response["result"] = f"Status: {status}"
         elif command["action"] == "terminate" and command["target"] == "deployment":
             deployment_id = command.get("id") or request.args.get("id")
             if not deployment_id or not re.match(r'^[a-zA-Z0-9_-]{1,50}$', deployment_id):
                 logger.warning("Invalid or missing deployment ID")
                 response["result"] = "Please provide a valid deployment ID"
-            elif terminate_deployment(deployment_id):
+            elif terminate_deployment(wallet_address, deployment_id):
                 response["result"] = "Deployment terminated"
             else:
                 response["result"] = "Termination failed or ID not found"
@@ -271,7 +278,7 @@ def status(deployment_id):
     if error:
         logger.warning(f"JWT validation failed: {error['msg']}")
         return jsonify(error), status_code
-    status_data = get_deployment_status(deployment_id)
+    status_data = get_deployment_status(wallet_address, deployment_id)
     logger.debug(f"Retrieved status for deployment {deployment_id}: {status_data}")
     return render_template('status.html', deployment_id=deployment_id, status=status_data)
 
@@ -302,9 +309,7 @@ def deployments():
     return jsonify(paginated_deployments), 200
 
 if __name__ == "__main__":
-    logger.info(f"Akash Wallet Address: {ADDRESS}")
     port = int(settings.app_port)
     environment = os.getenv('ENVIRONMENT', os.getenv('FLASK_ENV', 'production'))
     ssl_context = 'adhoc' if environment != 'development' else None
     app.run(debug=True, host="0.0.0.0", port=port, ssl_context=ssl_context)
-    
