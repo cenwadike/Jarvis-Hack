@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        handlers.RotatingFileHandler('auth.log', maxBytes=10_000_000, backupCount=5),
+        handlers.RotatingFileHandler('logs/auth.log', maxBytes=10_000_000, backupCount=5),
         logging.StreamHandler()
     ]
 )

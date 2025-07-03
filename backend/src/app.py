@@ -7,12 +7,13 @@ from flask import Flask, jsonify, request, render_template
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
-import speech_recognition as sr
 from cosmpy.aerial.wallet import LocalWallet
 from src.auth.auth import verify_signature, create_session, validate_session, settings
 from src.akash.akash_manager import deploy_to_akash, get_deployment_status, terminate_deployment, get_all_deployments
 from bech32 import bech32_decode
-from src.voice.voice_parser import parse_voice_command
+from src.voice.voice_parser import create_offline_voice_parser, VoiceCommandConfig
+import threading
+import magic
 
 # Configure logging
 logging.basicConfig(
@@ -37,14 +38,24 @@ app.config['SECRET_KEY'] = settings.secret_key
 allowed_origin = os.getenv('ALLOWED_ORIGIN', 'https://your-trusted-domain.com')
 CORS(app, resources={r"/*": {"origins": [allowed_origin]}})
 
-# Configure rate limiter
+# Configure rate limiter with custom key function
+def get_client_ip():
+    """Get client IP considering X-Forwarded-For header"""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers['X-Forwarded-For'].split(',')[0].strip()
+    return get_remote_address()
+
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
+    key_func=get_client_ip,
     default_limits=["200 per day", "50 per hour"],
     storage_uri=settings.redis_url
 )
-recognizer = sr.Recognizer()
+
+# Initialize voice parser
+voice_config = VoiceCommandConfig(max_audio_size_mb=10)
+voice_parser = create_offline_voice_parser(voice_config)
+voice_parser_lock = threading.Lock()
 
 # Initialize Akash wallet
 try:
@@ -58,6 +69,7 @@ except Exception as e:
 WALLET_ADDRESS_PATTERN = re.compile(r'^akash1[0-9a-z]{38}$')
 NONCE_PATTERN = re.compile(r'^[a-zA-Z0-9]{1,100}$')
 SIGNATURE_PATTERN = re.compile(r'^[0-9a-fA-F]{128}$')
+DEPLOYMENT_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,50}$')
 
 def validate_wallet_address(wallet_address: str) -> bool:
     """Validate Akash wallet address format and bech32 encoding."""
@@ -83,6 +95,22 @@ def validate_signature(signature: str) -> bool:
         logger.warning(f"Invalid signature format: {signature}")
         return False
     return True
+
+def validate_audio_file(audio_data: bytes) -> bool:
+    """Validate audio file format and size."""
+    try:
+        mime = magic.Magic(mime=True)
+        file_type = mime.from_buffer(audio_data)
+        if file_type not in ['audio/wav', 'audio/x-wav']:
+            logger.warning(f"Invalid audio file type: {file_type}")
+            return False
+        if len(audio_data) > voice_config.max_audio_size_mb * 1024 * 1024:
+            logger.warning(f"Audio file size exceeds {voice_config.max_audio_size_mb}MB")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"Audio validation error: {e}")
+        return False
 
 @app.route('/')
 def home():
@@ -120,8 +148,11 @@ def create_session_endpoint():
         token = create_session(wallet_address)
         logger.info(f"JWT created for {wallet_address}")
         return jsonify({"token": token}), 200
-    except Exception as e:
+    except (ValueError, TypeError, KeyError) as e:
         logger.error(f"Error in create_session: {str(e)}")
+        return jsonify({"msg": "Invalid request data"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in create_session: {str(e)}")
         return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/refresh_token', methods=['POST'])
@@ -142,25 +173,32 @@ def refresh_token():
         new_token = create_session(wallet_address)
         logger.info(f"Refreshed JWT for {wallet_address}")
         return jsonify({"token": new_token}), 200
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         logger.error(f"Error in refresh_token: {str(e)}")
+        return jsonify({"msg": "Invalid request data"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in refresh_token: {str(e)}")
         return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/validate_session', methods=['GET'])
 @limiter.limit("20 per minute")
 def validate_session_endpoint():
     """Validate an existing JWT."""
-    token = request.headers.get('X-Token') or request.args.get('token')
-    if not token:
-        logger.warning("Missing JWT in validate_session")
-        return jsonify({"msg": "JWT required"}), 401
+    try:
+        token = request.headers.get('X-Token') or request.args.get('token')
+        if not token:
+            logger.warning("Missing JWT in validate_session")
+            return jsonify({"msg": "JWT required"}), 401
 
-    wallet_address, error, status = validate_session(token)
-    if error:
-        logger.warning(f"JWT validation failed: {error['msg']}")
-        return jsonify(error), status
-    logger.debug(f"JWT validated for {wallet_address}")
-    return jsonify({"wallet_address": wallet_address}), 200
+        wallet_address, error, status = validate_session(token)
+        if error:
+            logger.warning(f"JWT validation failed: {error['msg']}")
+            return jsonify(error), status
+        logger.debug(f"JWT validated for {wallet_address}")
+        return jsonify({"wallet_address": wallet_address}), 200
+    except Exception as e:
+        logger.error(f"Error in validate_session: {str(e)}")
+        return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/login', methods=['POST'])
 @limiter.limit("10 per minute")
@@ -191,30 +229,41 @@ def login():
             return jsonify({"token": token}), 200
         logger.warning(f"Signature verification failed for {wallet_address}")
         return jsonify({"msg": "Signature verification failed"}), 401
-    except Exception as e:
+    except (ValueError, TypeError, KeyError) as e:
         logger.error(f"Error in login: {str(e)}")
+        return jsonify({"msg": "Invalid request data"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in login: {str(e)}")
         return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/voice', methods=['POST'])
 @limiter.limit("10 per minute")
 def voice_command():
-    """Handle voice commands for deployment actions."""
-    token = request.headers.get('X-Token') or request.args.get('token')
-    if not token:
-        logger.warning("Missing JWT in voice_command")
-        return jsonify({"msg": "JWT required"}), 401
-
-    wallet_address, error, status = validate_session(token)
-    if error:
-        logger.warning(f"JWT validation failed: {error['msg']}")
-        return jsonify(error), status
-
+    """Handle voice commands for deployment actions from uploaded audio."""
     try:
-        with sr.Microphone() as source:
-            logger.debug("Listening for voice command...")
-            audio = recognizer.listen(source, timeout=5)
+        token = request.headers.get('X-Token') or request.args.get('token')
+        if not token:
+            logger.warning("Missing JWT in voice_command")
+            return jsonify({"msg": "JWT required"}), 401
 
-        command, raw_text = parse_voice_command(audio)
+        wallet_address, error, status = validate_session(token)
+        if error:
+            logger.warning(f"JWT validation failed: {error['msg']}")
+            return jsonify(error), status
+
+        if 'audio' not in request.files:
+            logger.warning("No audio file provided in voice_command")
+            return jsonify({"msg": "No audio file provided"}), 400
+
+        audio_file = request.files['audio']
+        audio_data = audio_file.read()
+
+        if not validate_audio_file(audio_data):
+            return jsonify({"msg": "Invalid audio file format or size"}), 400
+
+        with voice_parser_lock:
+            command, raw_text = voice_parser.parse_voice_command_from_audio(audio_data)
+        
         response = {"raw_text": raw_text}
 
         if command["action"] == "deploy" and command["target"] == "deployment":
@@ -234,7 +283,7 @@ def voice_command():
             response["result"] = f"Deployed {command['image']} with ID: {deployment_id}"
         elif command["action"] == "status" and command["target"] == "deployment":
             deployment_id = command.get("id") or request.args.get("id")
-            if not deployment_id or not re.match(r'^[a-zA-Z0-9_-]{1,50}$', deployment_id):
+            if not deployment_id or not DEPLOYMENT_ID_PATTERN.match(deployment_id):
                 logger.warning("Invalid or missing deployment ID")
                 response["result"] = "Please provide a valid deployment ID"
             else:
@@ -242,7 +291,7 @@ def voice_command():
                 response["result"] = f"Status: {status}"
         elif command["action"] == "terminate" and command["target"] == "deployment":
             deployment_id = command.get("id") or request.args.get("id")
-            if not deployment_id or not re.match(r'^[a-zA-Z0-9_-]{1,50}$', deployment_id):
+            if not deployment_id or not DEPLOYMENT_ID_PATTERN.match(deployment_id):
                 logger.warning("Invalid or missing deployment ID")
                 response["result"] = "Please provide a valid deployment ID"
             elif terminate_deployment(wallet_address, deployment_id):
@@ -254,62 +303,75 @@ def voice_command():
 
         logger.info(f"Processed voice command for {wallet_address}: {raw_text}")
         return jsonify(response), 200
-    except sr.WaitTimeoutError:
-        logger.warning("No audio input received within timeout")
-        return jsonify({"msg": "No audio input received within timeout"}), 400
+
+    except (ValueError, TypeError, KeyError) as e:
+        logger.error(f"Error processing voice command: {str(e)}")
+        return jsonify({"msg": f"Invalid request data: {str(e)}"}), 400
     except Exception as e:
-        logger.error(f"Error processing voice command for {wallet_address}: {str(e)}")
-        return jsonify({"msg": f"Error processing voice command: {str(e)}"}), 500
+        logger.error(f"Unexpected error processing voice command: {str(e)}")
+        return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/status/<deployment_id>')
 @limiter.limit("20 per minute")
 def status(deployment_id):
     """Get the status of a specific deployment."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', deployment_id):
-        logger.warning(f"Invalid deployment ID format: {deployment_id}")
-        return jsonify({"msg": "Invalid deployment ID format"}), 400
+    try:
+        if not DEPLOYMENT_ID_PATTERN.match(deployment_id):
+            logger.warning(f"Invalid deployment ID format: {deployment_id}")
+            return jsonify({"msg": "Invalid deployment ID format"}), 400
 
-    token = request.headers.get('X-Token') or request.args.get('token')
-    if not token:
-        logger.warning("Missing JWT in status")
-        return jsonify({"msg": "JWT required"}), 401
+        token = request.headers.get('X-Token') or request.args.get('token')
+        if not token:
+            logger.warning("Missing JWT in status")
+            return jsonify({"msg": "JWT required"}), 401
 
-    wallet_address, error, status_code = validate_session(token)
-    if error:
-        logger.warning(f"JWT validation failed: {error['msg']}")
-        return jsonify(error), status_code
-    status_data = get_deployment_status(wallet_address, deployment_id)
-    logger.debug(f"Retrieved status for deployment {deployment_id}: {status_data}")
-    return render_template('status.html', deployment_id=deployment_id, status=status_data)
+        wallet_address, error, status_code = validate_session(token)
+        if error:
+            logger.warning(f"JWT validation failed: {error['msg']}")
+            return jsonify(error), status_code
+        status_data = get_deployment_status(wallet_address, deployment_id)
+        logger.debug(f"Retrieved status for deployment {deployment_id}: {status_data}")
+        return render_template('status.html', deployment_id=deployment_id, status=status_data)
+    except Exception as e:
+        logger.error(f"Error in status endpoint: {str(e)}")
+        return jsonify({"msg": "Internal server error"}), 500
 
 @app.route('/deployments')
 @limiter.limit("20 per minute")
 def deployments():
     """Get a paginated list of deployments for the authenticated wallet."""
-    token = request.headers.get('X-Token') or request.args.get('token')
-    if not token:
-        logger.warning("Missing JWT in deployments")
-        return jsonify({"msg": "JWT required"}), 401
+    try:
+        token = request.headers.get('X-Token') or request.args.get('token')
+        if not token:
+            logger.warning("Missing JWT in deployments")
+            return jsonify({"msg": "JWT required"}), 401
 
-    wallet_address, error, status = validate_session(token)
-    if error:
-        logger.warning(f"JWT validation failed: {error['msg']}")
-        return jsonify(error), status
+        wallet_address, error, status = validate_session(token)
+        if error:
+            logger.warning(f"JWT validation failed: {error['msg']}")
+            return jsonify(error), status
 
-    page = request.args.get('page', default=1, type=int)
-    per_page = request.args.get('per_page', default=10, type=int)
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
 
-    if page < 1:
-        page = 1
-    if per_page < 1 or per_page > 100:
-        per_page = 10
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 100:
+            per_page = 10
 
-    paginated_deployments = get_all_deployments(wallet_address, page, per_page)
-    logger.debug(f"Retrieved deployments for {wallet_address}: page {page}, per_page {per_page}")
-    return jsonify(paginated_deployments), 200
+        paginated_deployments = get_all_deployments(wallet_address, page, per_page)
+        logger.debug(f"Retrieved deployments for {wallet_address}: page {page}, per_page {per_page}")
+        return jsonify(paginated_deployments), 200
+    except (ValueError, TypeError) as e:
+        logger.error(f"Error in deployments endpoint: {str(e)}")
+        return jsonify({"msg": "Invalid request data"}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in deployments endpoint: {str(e)}")
+        return jsonify({"msg": "Internal server error"}), 500
 
 if __name__ == "__main__":
     port = int(settings.app_port)
     environment = os.getenv('ENVIRONMENT', os.getenv('FLASK_ENV', 'production'))
     ssl_context = 'adhoc' if environment != 'development' else None
     app.run(debug=True, host="0.0.0.0", port=port, ssl_context=ssl_context)
+    
